@@ -8,9 +8,10 @@ import styles from './page.module.css';
 export default function LandingPage() {
   const [activeSection, setActiveSection] = useState('hero');
   const isTransitioning = useRef(false);
+  const lastScrollTime = useRef(0);
   const sections = ['hero', 'stunting', 'prevention', 'features'];
 
-  // Scroll to section function with enhanced smoothness
+  // Smoother scroll to section function
   const scrollToSection = useCallback((sectionId: string) => {
     if (isTransitioning.current) return;
     
@@ -19,50 +20,23 @@ export default function LandingPage() {
     
     const element = document.getElementById(sectionId);
     if (element) {
-      // Enhanced smooth scroll with custom timing
       element.scrollIntoView({ 
         behavior: 'smooth', 
         block: 'start',
         inline: 'nearest'
       });
-      
-      // Alternative method for even smoother scrolling
-      const targetPosition = element.offsetTop;
-      const startPosition = window.pageYOffset;
-      const distance = targetPosition - startPosition;
-      const duration = 1000; // 1 second for smooth animation
-      let start: number | null = null;
-      
-      const smoothScroll = (timestamp: number) => {
-        if (!start) start = timestamp;
-        const progress = timestamp - start;
-        const percentage = Math.min(progress / duration, 1);
-        
-        // Easing function for smoother animation
-        const ease = (t: number) => t < 0.5 ? 4 * t * t * t : (t - 1) * (2 * t - 2) * (2 * t - 2) + 1;
-        const easedPercentage = ease(percentage);
-        
-        window.scrollTo(0, startPosition + distance * easedPercentage);
-        
-        if (progress < duration) {
-          window.requestAnimationFrame(smoothScroll);
-        }
-      };
-      
-      // Use the custom smooth scroll for even better control
-      // window.requestAnimationFrame(smoothScroll);
     }
     
     // Reset transition flag after scroll completes
     setTimeout(() => {
       isTransitioning.current = false;
-    }, 1200); // Increased timeout for smoother experience
+    }, 1000);
   }, []);
 
   // Handle scroll to update active section based on viewport
   useEffect(() => {
     const handleScroll = () => {
-      if (isTransitioning.current) return; // Don't update during programmatic scrolls
+      if (isTransitioning.current) return;
       
       const scrollY = window.scrollY;
       const windowHeight = window.innerHeight;
@@ -93,12 +67,10 @@ export default function LandingPage() {
       scrollTimeout = setTimeout(() => {
         handleScroll();
         scrollTimeout = null as any;
-      }, 100);
+      }, 50);
     };
 
     window.addEventListener('scroll', throttledScroll, { passive: true });
-    
-    // Set initial active section
     handleScroll();
     
     return () => {
@@ -109,10 +81,17 @@ export default function LandingPage() {
     };
   }, [sections]);
 
-  // Handle wheel events for section-by-section scrolling with smoother control
+  // Smoother wheel event handling
   useEffect(() => {
     const handleWheel = (e: WheelEvent) => {
-      // Only prevent default and handle custom scrolling if we're not already transitioning
+      const now = Date.now();
+      
+      // Debounce wheel events for smoother experience
+      if (now - lastScrollTime.current < 800) {
+        e.preventDefault();
+        return;
+      }
+      
       if (isTransitioning.current) {
         e.preventDefault();
         return;
@@ -122,27 +101,24 @@ export default function LandingPage() {
       const currentIndex = sections.indexOf(activeSection);
       let nextIndex;
 
-      // Increased threshold for more deliberate scrolling
-      if (Math.abs(delta) < 20) return; // Ignore very small scroll movements
+      // Higher threshold for more deliberate scrolling
+      if (Math.abs(delta) < 30) return;
 
       if (delta > 0) {
-        // Scrolling down
         nextIndex = Math.min(currentIndex + 1, sections.length - 1);
       } else {
-        // Scrolling up
         nextIndex = Math.max(currentIndex - 1, 0);
       }
 
       const nextSectionId = sections[nextIndex];
 
-      // Only scroll if we're moving to a different section
       if (nextSectionId !== activeSection) {
-        e.preventDefault(); // Prevent default scroll behavior
+        e.preventDefault();
+        lastScrollTime.current = now;
         scrollToSection(nextSectionId);
       }
     };
 
-    // Add wheel event listener with passive: false for better control
     window.addEventListener('wheel', handleWheel, { passive: false });
 
     return () => {
@@ -193,6 +169,42 @@ export default function LandingPage() {
       window.removeEventListener('keydown', handleKeyDown);
     };
   }, [activeSection, scrollToSection, sections]);
+
+  // Cleaner image animation on scroll
+  useEffect(() => {
+    const observerOptions = {
+      threshold: 0.1,
+      rootMargin: '0px 0px -50px 0px'
+    };
+
+    const imageObserver = new IntersectionObserver((entries) => {
+      entries.forEach(entry => {
+        if (entry.isIntersecting) {
+          const target = entry.target as HTMLElement;
+          
+          // Add animation class immediately for smoother effect
+          requestAnimationFrame(() => {
+            target.classList.add(styles.imageVisible);
+          });
+          
+          // Stop observing once animated
+          imageObserver.unobserve(target);
+        }
+      });
+    }, observerOptions);
+
+    // Observe all animatable elements
+    const imageElements = document.querySelectorAll(
+      `.${styles.heroImage}, .${styles.stuntingImage}, .${styles.featureImageCircle}, .${styles.warningSignLeft}, .${styles.warningSignRight}`
+    );
+    
+    imageElements.forEach(el => imageObserver.observe(el));
+
+    // Cleanup
+    return () => {
+      imageElements.forEach(el => imageObserver.unobserve(el));
+    };
+  }, []);
 
   return (
     <div className={styles.container}>
